@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>我的智能体 · LangGraph 多智能体版</title>
+<!-- Markdown 渲染依赖（需联网加载一次；加载失败则回退为纯文本，不影响使用） -->
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f7fa; --panel: #ffffff; --accent: #6366f1; --accent-light: #eef2ff;
+    --user-bubble: #6366f1; --bot-bubble: #ffffff; --text: #1f2937; --muted: #6b7280; --border: #e5e7eb;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: "Microsoft YaHei", sans-serif; }
+  body { background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
+  #panel { width: 320px; min-width: 320px; background: var(--panel); border-right: 1px solid var(--border);
+    padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+  #panel h2 { font-size: 18px; color: var(--accent); }
+  .field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .field input, .field select, .field textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 8px; font-size: 14px; outline: none; background: #fafafa; }
+  .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--accent); }
+  .field textarea { resize: vertical; min-height: 80px; }
+  .row2 { display: flex; gap: 10px; } .row2 .field { flex: 1; }
+  .slider-row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .slider-row input[type=range] { flex: 1; accent-color: var(--accent); }
+  .slider-row span { width: 60px; text-align: center; color: var(--accent); font-weight: bold; }
+  #presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  #presets button { background: var(--accent-light); color: var(--accent); border: none; border-radius: 14px;
+    padding: 4px 12px; font-size: 12px; cursor: pointer; }
+  #presets button:hover { background: var(--accent); color: #fff; }
+  .btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 10px; font-size: 14px; cursor: pointer; width: 100%; }
+  .btn:hover { opacity: .9; } .btn.ghost { background: #f3f4f6; color: var(--muted); }
+  details { font-size: 13px; } summary { font-size: 13px; color: var(--accent); cursor: pointer; }
+  .hint { font-size: 12px; color: var(--muted); }
+
+  #chatArea { flex: 1; display: flex; flex-direction: column; }
+  #chatHeader { padding: 14px 20px; background: var(--panel); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px; }
+  #avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--accent); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  #chatHeader .name { font-weight: bold; }
+  #chatHeader .status { font-size: 12px; color: var(--muted); }
+  #messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+  .msg { display: flex; gap: 10px; max-width: 78%; animation: pop .2s; }
+  @keyframes pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+  .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+  .bubble { padding: 10px 14px; border-radius: 14px; font-size: 15px; line-height: 1.7; word-break: break-word; overflow-wrap: anywhere; }
+  .msg.bot .bubble { background: var(--bot-bubble); border: 1px solid var(--border); border-top-left-radius: 4px; }
+  .msg.user .bubble { background: var(--user-bubble); color: #fff; border-top-right-radius: 4px; white-space: pre-wrap; }
+  .tool-tag { font-size: 11px; color: var(--accent); background: var(--accent-light); border-radius: 10px;
+    padding: 1px 10px; margin-top: 4px; display: inline-block; }
+  .mini-avatar { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .msg.bot .mini-avatar { background: var(--accent-light); }
+  .msg.user .mini-avatar { background: var(--user-bubble); color: #fff; }
+  #inputBar { display: flex; gap: 10px; padding: 14px 20px; background: var(--panel); border-top: 1px solid var(--border); }
+  #inputBar input { flex: 1; padding: 12px 16px; border: 1px solid var(--border); border-radius: 24px; font-size: 15px; outline: none; }
+  #inputBar input:focus { border-color: var(--accent); }
+  #sendBtn { background: var(--accent); color: #fff; border: none; border-radius: 24px; padding: 0 24px; font-size: 15px; cursor: pointer; }
+  #sendBtn:disabled { opacity: .5; cursor: default; }
+  @media (max-width: 720px) {
+    body { flex-direction: column; }
+    #panel { width: 100%; min-width: 0; max-height: 45vh; border-right: none; border-bottom: 1px solid var(--border); }
+  }
+
+  /* ===== Markdown 渲染样式 ===== */
+  .md h1, .md h2, .md h3, .md h4 { margin: 10px 0 6px; line-height: 1.4; }
+  .md h1 { font-size: 19px; } .md h2 { font-size: 17px; color: var(--accent); }
+  .md h3 { font-size: 15.5px; } .md p { margin: 6px 0; }
+  .md ul, .md ol { margin: 6px 0 6px 22px; }
+  .md li { margin: 3px 0; }
+  .md code { background: #f1f5f9; border-radius: 4px; padding: 1px 6px; font-size: 13px;
+    font-family: Consolas, monospace; color: #be185d; }
+  .md pre { background: #1e293b; color: #e2e8f0; border-radius: 8px; padding: 12px 14px;
+    overflow-x: auto; margin: 8px 0; }
+  .md pre code { background: none; color: inherit; padding: 0; }
+  .md table { border-collapse: collapse; margin: 8px 0; font-size: 14px; }
+  .md th, .md td { border: 1px solid var(--border); padding: 5px 12px; }
+  .md th { background: var(--accent-light); }
+  .md blockquote { border-left: 3px solid var(--accent); padding-left: 10px; color: var(--muted); margin: 6px 0; }
+  .md hr { border: none; border-top: 1px dashed var(--border); margin: 10px 0; }
+  .md .katex { font-size: 1.05em; }
+  .md a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div id="panel">
+  <h2>🎭 智能体人设工坊</h2>
+  <div class="field"><label>快捷预设（点一下自动填充）</label><div id="presets"></div></div>
+  <div class="row2">
+    <div class="field"><label>名字</label><input id="setName" value="小灵"></div>
+    <div class="field"><label>头像 emoji</label><input id="setAvatar" value="🤖" maxlength="4"></div>
+  </div>
+  <div class="field"><label>身份 / 职业设定</label><input id="setRole" value="一位耐心温柔的 AI 学习伙伴"></div>
+  <div class="field"><label>性格描述（写详细一点效果更好）</label>
+    <textarea id="setPersona">你叫小灵，是一位耐心温柔的 AI 学习伙伴。你乐于助人，善于倾听，回答问题时条理清晰，喜欢举例子，偶尔也会开个小玩笑活跃气氛。</textarea></div>
+  <div class="field"><label>语气风格</label>
+    <select id="setTone">
+      <option value="亲切自然，像朋友聊天">亲切自然</option>
+      <option value="正式专业，用词严谨">正式专业</option>
+      <option value="活泼俏皮，多用表情和语气词">活泼俏皮</option>
+      <option value="高冷简洁，惜字如金">高冷简洁</option>
+      <option value="古风文雅，之乎者也">古风文雅</option>
+    </select></div>
+  <div class="field">
+    <div class="slider-row"><span>幽默</span><input type="range" id="setHumor" min="0" max="100" value="30"><span id="humorVal">30</span></div>
+    <div class="slider-row"><span>热情</span><input type="range" id="setWarm" min="0" max="100" value="70"><span id="warmVal">70</span></div>
+    <div class="slider-row"><span>话多</span><input type="range" id="setTalk" min="0" max="100" value="50"><span id="talkVal">50</span></div>
+  </div>
+  <button class="btn" id="applyBtn">✅ 应用新人设</button>
+  <button class="btn ghost" id="clearBtn">🗑️ 清空聊天记录</button>
+  <details>
+    <summary>🔌 后端连接设置</summary>
+    <div style="margin-top:8px; display:flex; flex-direction:column; gap:8px;">
+      <div class="field"><label>后端地址（server.py 启动后默认）</label>
+        <input id="backendUrl" value="http://localhost:8000"></div>
+      <p class="hint">先运行 <code>python server.py</code>，状态栏显示「LangGraph 在线」即为连通。连不上时自动用本地模拟回复。</p>
+    </div>
+  </details>
+</div>
+
+<div id="chatArea">
+  <div id="chatHeader">
+    <div id="avatar">🤖</div>
+    <div><div class="name" id="botName">小灵</div><div class="status" id="botStatus">检测后端中…</div></div>
+  </div>
+  <div id="messages"></div>
+  <div id="inputBar">
+    <input id="userInput" placeholder="说点什么吧…（Enter 发送）" autocomplete="off">
+    <button id="sendBtn">发送</button>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+ * 想修改？三个入口：
+ * 1. PRESETS    —— 预设人设模板（增删改）
+ * 2. localReply —— 本地模拟回复语料（后端没启动时用）
+ * 3. backendUrl —— 默认后端地址
+ * ============================================================ */
+const PRESETS = [
+  { name: "🌸 温柔助手", avatar: "🌸", role: "一位温柔耐心的学习伙伴",
+    persona: "你叫小灵，性格温柔耐心，善于倾听，回答条理清晰，喜欢举例子鼓励人，从不嘲讽用户。",
+    tone: "亲切自然，像朋友聊天", humor: 20, warm: 90, talk: 50 },
+  { name: "😏 毒舌损友", avatar: "😏", role: "一个嘴贱但靠谱的损友",
+    persona: "你叫阿毒，是一个嘴贱但内心善良的损友。你喜欢吐槽用户，说话带刺但不过分，损完总会给出真正有用的建议，绝不恶意攻击。",
+    tone: "活泼俏皮，毒舌吐槽", humor: 90, warm: 40, talk: 60 },
+  { name: "👨‍🏫 严谨导师", avatar: "👨‍🏫", role: "一位治学严谨的大学教授",
+    persona: "你是一位治学严谨的教授，回答问题时注重逻辑和准确性，喜欢分点论述，会指出用户问题中的漏洞，要求严格但出于善意。",
+    tone: "正式专业，用词严谨", humor: 5, warm: 50, talk: 80 },
+  { name: "🎀 二次元少女", avatar: "🎀", role: "一个元气满满的二次元少女",
+    persona: "你叫糖糖，是一个元气满满的二次元少女，说话带语气词，喜欢用颜文字和 emoji，偶尔中二，但对朋友超级热心。",
+    tone: "活泼俏皮，多用表情和语气词", humor: 80, warm: 95, talk: 70 },
+  { name: "🧊 高冷极简", avatar: "🧊", role: "一个惜字如金的高冷存在",
+    persona: "你是一个惜字如金的高冷智能体，回答能短则短，绝不多说一个字，但从不说废话，句句在点上。偶尔高冷地关心一下用户。",
+    tone: "高冷简洁，惜字如金", humor: 30, warm: 30, talk: 10 },
+  { name: "🎓 通信学长", avatar: "🎓", role: "通信工程专业保研上岸的学长",
+    persona: "你是一位通信工程专业的高年级学长，保研到通信与 AI 交叉方向。你熟悉通信原理、信号处理，也在学机器学习和 Agent 开发，乐于给学弟学妹分享学习和就业经验。",
+    tone: "亲切自然，像学长聊天", humor: 50, warm: 85, talk: 65 },
+  { name: "🎤 面试官", avatar: "🎤", role: "一位犀利的互联网大厂面试官",
+    persona: "你是一位资深大厂面试官，正在面试 Agent 应用工程师岗位。你提问尖锐、直击要害，会追问项目细节，但面试结束会给出真诚的改进建议。",
+    tone: "正式专业，用词严谨", humor: 10, warm: 40, talk: 70 },
+  { name: "💕 恋爱陪聊", avatar: "💕", role: "一个会哄人开心的陪伴者",
+    persona: "你是一个温柔会撒娇的陪伴者，说话软乎乎的，很会共情和安慰人，会记住用户说过的小事，让用户感到被在乎。",
+    tone: "活泼俏皮，软萌撒娇", humor: 60, warm: 100, talk: 70 },
+  { name: "🌙 深夜树洞", avatar: "🌙", role: "一个安静的深夜倾听者",
+    persona: "你是一个安静的树洞，深夜陪伴用户。你话不多，但每句都走心，善于倾听和共情，不随意给建议，先理解用户的情绪。",
+    tone: "亲切自然，轻声细语", humor: 10, warm: 90, talk: 20 },
+];
+
+const $ = id => document.getElementById(id);
+let config = JSON.parse(localStorage.getItem("agentConfig") || "null");
+let history = JSON.parse(localStorage.getItem("agentHistory") || "[]");
+if (!Array.isArray(history)) history = [];
+let backendOnline = false;
+
+/* ---------- Markdown 渲染：marked + KaTeX，加载失败自动回退纯文本 ---------- */
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function renderMarkdown(text) {
+  if (!window.marked) return escapeHtml(text);
+  const formulas = [];
+  // 先取出 $$...$$ 公式占位，避免被 marked 破坏
+  let t = text.replace(/\$\$([\s\S]*?)\$\$/g, (m, f) => {
+    formulas.push(f.trim()); return "@@F" + (formulas.length - 1) + "@@";
+  });
+  let html = marked.parse(t, { breaks: true });
+  html = html.replace(/@@F(\d+)@@/g, (m, i) => {
+    if (window.katex) {
+      try { return katex.renderToString(formulas[+i], { throwOnError: false, displayMode: true }); }
+      catch (e) { return "$$" + escapeHtml(formulas[+i]) + "$$"; }
+    }
+    return "$$" + escapeHtml(formulas[+i]) + "$$";
+  });
+  return html;
+}
+
+/* ---------- 本地模拟回复（后端没启动时的降级方案） ---------- */
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+function localReply(text) {
+  const t = text.toLowerCase();
+  const rules = [
+    [/(你好|hi|hello|嗨|在吗)/, () => pick([`${config.name}在此，有什么可以帮你的吗？`, `你好呀！今天想聊点什么？`])],
+    [/(笑话|讲个)/, () => pick(["程序员为什么分不清万圣节和圣诞节？因为 Oct 31 == Dec 25。",
+      "通信工程的浪漫：我对你的爱就像光纤，单向传输，永不衰减。"])],
+    [/(谢谢|感谢)/, () => pick(["不客气！", "能帮上忙就好～"])],
+    [/(再见|拜拜|bye)/, () => "拜拜，下次见！"],
+  ];
+  for (const [re, fn] of rules) if (re.test(t)) return fn();
+  return `（本地模拟模式）关于「${text}」，我的看法是还不错～
+
+💡 启动 LangGraph 后端（python server.py）后，我可以调用工具、检索知识库，给你更专业的回答。`;
+}
+
+/* ---------- 渲染 ---------- */
+function renderHeader() {
+  $("avatar").textContent = config.avatar;
+  $("botName").textContent = config.name;
+  $("botStatus").textContent = backendOnline
+    ? `LangGraph 多智能体在线 · ${config.name}已就绪`
+    : "本地模拟模式（后端未连接）";
+}
+function addMsg(role, text, toolUsed) {
+  const div = document.createElement("div");
+  div.className = "msg " + role;
+  div.innerHTML = `<div class="mini-avatar">${role === "user" ? "🧑" : config.avatar}</div><div class="bubble"></div>`;
+  const bubble = div.querySelector(".bubble");
+  if (role === "bot") { bubble.classList.add("md"); bubble.innerHTML = renderMarkdown(text); }
+  else { bubble.textContent = text; }
+  if (toolUsed) {
+    const tag = document.createElement("div");
+    tag.className = "tool-tag";
+    tag.textContent = "🔧 调用工具：" + toolUsed;
+    div.appendChild(tag);
+  }
+  $("messages").appendChild(div);
+  $("messages").scrollTop = $("messages").scrollHeight;
+}
+function saveAll() {
+  localStorage.setItem("agentConfig", JSON.stringify(config));
+  localStorage.setItem("agentHistory", JSON.stringify(history.slice(-50)));
+}
+
+/* ---------- 设置面板读写 ---------- */
+function readPanel() {
+  return { name: $("setName").value.trim() || "小灵", avatar: $("setAvatar").value.trim() || "🤖",
+    role: $("setRole").value.trim(), persona: $("setPersona").value.trim(), tone: $("setTone").value,
+    humor: +$("setHumor").value, warm: +$("setWarm").value, talk: +$("setTalk").value };
+}
+function writePanel(c) {
+  $("setName").value = c.name; $("setAvatar").value = c.avatar; $("setRole").value = c.role;
+  $("setPersona").value = c.persona; $("setTone").value = c.tone;
+  $("setHumor").value = c.humor; $("setWarm").value = c.warm; $("setTalk").value = c.talk;
+  $("humorVal").textContent = c.humor; $("warmVal").textContent = c.warm; $("talkVal").textContent = c.talk;
+}
+
+/* ---------- 发送 ---------- */
+async function send() {
+  const text = $("userInput").value.trim();
+  if (!text) return;
+  $("userInput").value = "";
+  addMsg("user", text);
+  history.push({ role: "user", content: text });
+  saveAll();
+  $("sendBtn").disabled = true;
+
+  let reply, toolUsed = null;
+  if (backendOnline) {
+    try {
+      const res = await fetch(($("backendUrl").value.trim() || "http://localhost:8000") + "/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, config, history: history.slice(-20) })
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      reply = data.reply; toolUsed = data.tool_used;
+    } catch (e) {
+      backendOnline = false; renderHeader();
+      reply = localReply(text);
+    }
+  } else {
+    await new Promise(r => setTimeout(r, 400));
+    reply = localReply(text);
+  }
+  addMsg("bot", reply, toolUsed);
+  history.push({ role: "assistant", content: reply });
+  saveAll();
+  $("sendBtn").disabled = false;
+}
+
+/* ---------- 检测后端 ---------- */
+async function pingBackend() {
+  try {
+    const res = await fetch(($("backendUrl").value.trim() || "http://localhost:8000") + "/", { signal: AbortSignal.timeout(2000) });
+    backendOnline = res.ok;
+  } catch (e) { backendOnline = false; }
+  renderHeader();
+}
+
+/* ---------- 事件绑定 ---------- */
+["setHumor", "setWarm", "setTalk"].forEach(id =>
+  $(id).addEventListener("input", e => $(id + "Val").textContent = e.target.value));
+
+PRESETS.forEach(p => {
+  const b = document.createElement("button");
+  b.textContent = p.name;
+  b.onclick = () => { writePanel(p); config = readPanel(); renderHeader(); saveAll();
+    addMsg("bot", `已切换为【${p.name}】人设！你好呀，我是${p.name.slice(3)}～`); };
+  $("presets").appendChild(b);
+});
+
+$("applyBtn").onclick = () => { config = readPanel(); renderHeader(); saveAll();
+  addMsg("bot", `人设已更新！我是${config.name}，${config.role}，新性格已就位 ✨`); };
+$("clearBtn").onclick = () => { history = []; saveAll(); $("messages").innerHTML = ""; };
+$("sendBtn").onclick = send;
+$("userInput").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+
+/* ---------- 初始化 ---------- */
+if (!config) config = PRESETS[0];
+writePanel(config); renderHeader();
+if (history.length) history.forEach(m => addMsg(m.role === "user" ? "user" : "bot", m.content));
+else addMsg("bot", `你好！我是${config.name}。运行 python server.py 启动 LangGraph 多智能体后端后，我可以调用工具、检索课程知识库，回复还会经过评审节点质检哦～`);
+pingBackend();
+</script>
+</body>
+</html>
